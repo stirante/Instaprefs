@@ -17,8 +17,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
+import de.robv.android.xposed.IXposedHookZygoteInit;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XC_MethodReplacement;
+import de.robv.android.xposed.XSharedPreferences;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
@@ -26,22 +28,36 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 /**
  * Created by stirante
  */
-public class InstaprefsModule implements IXposedHookLoadPackage {
+public class InstaprefsModule implements IXposedHookLoadPackage, IXposedHookZygoteInit {
+
+    private XSharedPreferences prefs;
+    private boolean debug;
+
+
+    @Override
+    public void initZygote(StartupParam startupParam) throws Throwable {
+        prefs = new XSharedPreferences("com.stirante.instaprefs");
+        prefs.makeWorldReadable();
+    }
 
     @Override
     public void handleLoadPackage(final XC_LoadPackage.LoadPackageParam packageParam) throws Throwable {
         if (packageParam.packageName.equalsIgnoreCase("com.instagram.android")) {
+            prefs.reload();
+            debug = prefs.getBoolean("enable_spam", false);
             XposedHelpers.findAndHookMethod(Application.class, "attach", Context.class, new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                     final Context context = (Context) param.args[0];
                     //disable double tap to like
-                    XposedHelpers.findAndHookMethod("com.instagram.android.feed.d.a.b", packageParam.classLoader, "c", XposedHelpers.findClass("com.instagram.feed.a.x", packageParam.classLoader), XposedHelpers.findClass("com.instagram.feed.ui.h", packageParam.classLoader), int.class, new XC_MethodReplacement() {
-                        @Override
-                        protected Object replaceHookedMethod(MethodHookParam methodHookParam) throws Throwable {
-                            return null;
-                        }
-                    });
+                    if (prefs.getBoolean("disable_double_tap_like", false)) {
+                        XposedHelpers.findAndHookMethod("com.instagram.android.feed.d.a.b", packageParam.classLoader, "c", XposedHelpers.findClass("com.instagram.feed.a.x", packageParam.classLoader), XposedHelpers.findClass("com.instagram.feed.ui.h", packageParam.classLoader), int.class, new XC_MethodReplacement() {
+                            @Override
+                            protected Object replaceHookedMethod(MethodHookParam methodHookParam) throws Throwable {
+                                return null;
+                            }
+                        });
+                    }
                     //Add download and zoom
                     XposedHelpers.findAndHookMethod("com.instagram.android.feed.adapter.a.am", packageParam.classLoader, "b", new XC_MethodHook() {
                         @Override
@@ -80,12 +96,12 @@ public class InstaprefsModule implements IXposedHookLoadPackage {
                                     } else if (type == 2) {
                                         FileUtils.download(video, new File(FileUtils.INSTAPREFS_DIR, user + "/" + id + ".mp4"), context);
                                     } else {
-                                        XposedBridge.log("Unsupported media type " + XposedHelpers.getObjectField(media, "f").toString());
+                                        debug("Unsupported media type " + XposedHelpers.getObjectField(media, "f").toString());
                                     }
                                 } else if (clicked.equalsIgnoreCase("Zoom")) {
                                     String image = (String) XposedHelpers.callMethod(media, "a", context);
                                     Intent intent = new Intent();
-                                    intent.setComponent(ComponentName.unflattenFromString("com.stirante.instaprefs/.MainActivity"));
+                                    intent.setComponent(ComponentName.unflattenFromString("com.stirante.instaprefs/.ZoomActivity"));
                                     intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                                     intent.putExtra("url", image);
                                     context.startActivity(intent);
@@ -147,47 +163,55 @@ public class InstaprefsModule implements IXposedHookLoadPackage {
                                 } else if (type == 2) {
                                     FileUtils.download(video, new File(FileUtils.INSTAPREFS_DIR, user + "/" + id + ".mp4"), context);
                                 } else {
-                                    XposedBridge.log("Unsupported media type " + XposedHelpers.getObjectField(media, "f").toString());
+                                    debug("Unsupported media type " + XposedHelpers.getObjectField(media, "f").toString());
                                 }
-                            }
-                            else if (clicked.equalsIgnoreCase("Zoom")) {
+                            } else if (clicked.equalsIgnoreCase("Zoom")) {
                                 Object media = XposedHelpers.getObjectField(XposedHelpers.getObjectField(param.thisObject, "b"), "B");
                                 String image = (String) XposedHelpers.callMethod(media, "a", context);
                                 int type = XposedHelpers.getIntField(XposedHelpers.getObjectField(media, "f"), "e");
                                 if (type == 1) {
                                     Intent intent = new Intent();
-                                    intent.setComponent(ComponentName.unflattenFromString("com.stirante.instaprefs/.MainActivity"));
+                                    intent.setComponent(ComponentName.unflattenFromString("com.stirante.instaprefs/.ZoomActivity"));
                                     intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                                     intent.putExtra("url", image);
                                     context.startActivity(intent);
                                 } else if (type == 2) {
                                     Toast.makeText(context, "Can't zoom video!", Toast.LENGTH_SHORT).show();
                                 } else {
-                                    XposedBridge.log("Unsupported media type " + XposedHelpers.getObjectField(media, "f").toString());
+                                    debug("Unsupported media type " + XposedHelpers.getObjectField(media, "f").toString());
                                 }
                             }
                         }
                     });
                     //hide ads
-                    XposedHelpers.findAndHookMethod("com.instagram.feed.a.z", packageParam.classLoader, "a", XposedHelpers.findClass("com.instagram.feed.a.x", packageParam.classLoader), new XC_MethodHook() {
-                        @Override
-                        protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                            Object media = param.args[0];
-                            if (XposedHelpers.getObjectField(media, "Q") != null) {
-                                param.setResult(null);
+                    if (prefs.getBoolean("disable_ads", false)) {
+                        XposedHelpers.findAndHookMethod("com.instagram.feed.a.z", packageParam.classLoader, "a", XposedHelpers.findClass("com.instagram.feed.a.x", packageParam.classLoader), new XC_MethodHook() {
+                            @Override
+                            protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                                Object media = param.args[0];
+                                if (XposedHelpers.getObjectField(media, "Q") != null) {
+                                    param.setResult(null);
+                                }
                             }
-                        }
-                    });
+                        });
+                    }
                     //hide recommendation
-                    XposedHelpers.findAndHookMethod("com.instagram.g.o", packageParam.classLoader, "a", XposedHelpers.findClass("com.instagram.common.analytics.f", packageParam.classLoader), View.class, XposedHelpers.findClass("com.instagram.g.a.g", packageParam.classLoader), XposedHelpers.findClass("com.instagram.g.p", packageParam.classLoader), new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                            XposedHelpers.callMethod(param.args[3], "c", param.args[2]);
-                            XposedBridge.log("Hid the recommendation");
-                        }
-                    });
+                    if (prefs.getBoolean("disable_suggested_follow", false)) {
+                        XposedHelpers.findAndHookMethod("com.instagram.g.o", packageParam.classLoader, "a", XposedHelpers.findClass("com.instagram.common.analytics.f", packageParam.classLoader), View.class, XposedHelpers.findClass("com.instagram.g.a.g", packageParam.classLoader), XposedHelpers.findClass("com.instagram.g.p", packageParam.classLoader), new XC_MethodHook() {
+                            @Override
+                            protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                                XposedHelpers.callMethod(param.args[3], "c", param.args[2]);
+                                debug("Hid the recommendation");
+                            }
+                        });
+                    }
                 }
             });
         }
+    }
+
+    private void debug(String string) {
+        if (debug)
+            XposedBridge.log("[Instaprefs] " + string);
     }
 }

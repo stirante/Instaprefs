@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <PreferenceCategory android:title="@string/pref_title">
+
+        <CheckBoxPreference
+            android:key="disable_double_tap_like"
+            android:title="@string/pref_double_tap_like_title" />
+        <CheckBoxPreference
+            android:key="disable_suggested_follow"
+            android:summary="@string/pref_suggested_follow_description"
+            android:title="@string/pref_suggested_follow_title" />
+        <CheckBoxPreference
+            android:key="disable_ads"
+            android:title="@string/pref_ads_title" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="@string/pref_debug">
+
+        <CheckBoxPreference
+            android:key="enable_spam"
+            android:summary="@string/pref_debug_description"
+            android:title="@string/pref_debug_title" />
+
+    </PreferenceCategory>
+
+</PreferenceScreen>

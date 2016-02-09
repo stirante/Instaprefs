@@ -12,7 +12,7 @@ import java.io.InputStream;
 import java.net.URL;
 import java.net.URLConnection;
 
-public class MainActivity extends AppCompatActivity {
+public class ZoomActivity extends AppCompatActivity {
 
     private GestureImageView picture;
 

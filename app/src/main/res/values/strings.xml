@@ -1,3 +1,11 @@
 <resources>
     <string name="app_name">Instaprefs</string>
+    <string name="pref_debug_title">Enable debug</string>
+    <string name="pref_debug_description">Enables logging information</string>
+    <string name="pref_debug">Debugging</string>
+    <string name="pref_double_tap_like_title">Disable double tap to like</string>
+    <string name="pref_suggested_follow_title">Disable showing suggested accounts to follow</string>
+    <string name="pref_suggested_follow_description">Hides the list on top which show people you might want to follow</string>
+    <string name="pref_ads_title">Hide ads</string>
+    <string name="pref_title">Preferences</string>
 </resources>
