@@ -26,7 +26,7 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 /**
  * Created by stirante
  */
-public class XposedMain implements IXposedHookLoadPackage {
+public class InstaprefsModule implements IXposedHookLoadPackage {
 
     @Override
     public void handleLoadPackage(final XC_LoadPackage.LoadPackageParam packageParam) throws Throwable {
