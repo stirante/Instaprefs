@@ -13,6 +13,7 @@ import android.widget.Toast;
 import com.stirante.instaprefs.utils.FileUtils;
 
 import java.io.File;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Collections;
 
@@ -24,6 +25,8 @@ import de.robv.android.xposed.XSharedPreferences;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
+
+import static de.robv.android.xposed.XposedHelpers.*;
 
 /**
  * Created by stirante
@@ -45,13 +48,13 @@ public class InstaprefsModule implements IXposedHookLoadPackage, IXposedHookZygo
         if (packageParam.packageName.equalsIgnoreCase("com.instagram.android")) {
             prefs.reload();
             debug = prefs.getBoolean("enable_spam", false);
-            XposedHelpers.findAndHookMethod(Application.class, "attach", Context.class, new XC_MethodHook() {
+            findAndHookMethod(Application.class, "attach", Context.class, new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                     final Context context = (Context) param.args[0];
                     //disable double tap to like
                     if (prefs.getBoolean("disable_double_tap_like", false)) {
-                        XposedHelpers.findAndHookMethod("com.instagram.android.feed.d.a.b", packageParam.classLoader, "c", XposedHelpers.findClass("com.instagram.feed.a.x", packageParam.classLoader), XposedHelpers.findClass("com.instagram.feed.ui.h", packageParam.classLoader), int.class, new XC_MethodReplacement() {
+                        findAndHookMethod("com.instagram.android.feed.d.a.b", packageParam.classLoader, "c", findClass("com.instagram.feed.a.x", packageParam.classLoader), findClass("com.instagram.feed.ui.h", packageParam.classLoader), int.class, new XC_MethodReplacement() {
                             @Override
                             protected Object replaceHookedMethod(MethodHookParam methodHookParam) throws Throwable {
                                 return null;
@@ -59,15 +62,15 @@ public class InstaprefsModule implements IXposedHookLoadPackage, IXposedHookZygo
                         });
                     }
                     //Add download and zoom
-                    XposedHelpers.findAndHookMethod("com.instagram.android.feed.adapter.a.am", packageParam.classLoader, "b", new XC_MethodHook() {
+                    findAndHookMethod("com.instagram.android.feed.adapter.a.ao", packageParam.classLoader, "b", new XC_MethodHook() {
                         @Override
                         protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                             CharSequence[] result = (CharSequence[]) param.getResult();
                             ArrayList<CharSequence> newResult = new ArrayList<>();
                             Collections.addAll(newResult, result);
                             newResult.add("Download");
-                            Object media = XposedHelpers.getObjectField(param.thisObject, "e");
-                            int type = XposedHelpers.getIntField(XposedHelpers.getObjectField(media, "f"), "e");
+                            Object media = getObjectField(param.thisObject, "e");
+                            int type = getIntField(getObjectField(media, "f"), "f");
                             if (type == 1)
                                 newResult.add("Zoom");
                             CharSequence[] arr = new CharSequence[newResult.size()];
@@ -76,30 +79,29 @@ public class InstaprefsModule implements IXposedHookLoadPackage, IXposedHookZygo
                         }
                     });
                     //handle download and zoom
-                    XposedHelpers.findAndHookMethod("com.instagram.android.feed.adapter.a.ai", packageParam.classLoader, "onClick", XposedHelpers.findClass("android.content.DialogInterface", packageParam.classLoader), int.class, new XC_MethodHook() {
+                    findAndHookMethod("com.instagram.android.feed.adapter.a.ak", packageParam.classLoader, "onClick", findClass("android.content.DialogInterface", packageParam.classLoader), int.class, new XC_MethodHook() {
                         @Override
                         protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                            String clicked = ((Object[]) XposedHelpers.callMethod(XposedHelpers.getObjectField(param.thisObject, "a"), "b"))[(int) param.args[1]].toString();
+                            String clicked = ((Object[]) callMethod(getObjectField(param.thisObject, "a"), "b"))[(int) param.args[1]].toString();
                             if (clicked.equalsIgnoreCase("Download") || clicked.equalsIgnoreCase("Zoom")) {
                                 ((DialogInterface) param.args[0]).dismiss();
-                                Object media = XposedHelpers.getObjectField(XposedHelpers.getObjectField(param.thisObject, "a"), "e");
+                                Object media = getObjectField(getObjectField(param.thisObject, "a"), "e");
                                 if (clicked.equalsIgnoreCase("Download")) {
-                                    Object userObject = XposedHelpers.getObjectField(media, "e");
-                                    String user = (String) XposedHelpers.getObjectField(userObject, "a");
-                                    String video = (String) XposedHelpers.getObjectField(media, "ac");
-                                    String image = (String) XposedHelpers.callMethod(media, "a", context);
-                                    String id = (String) XposedHelpers.callMethod(media, "e");
-                                    int type = XposedHelpers.getIntField(XposedHelpers.getObjectField(media, "f"), "e");
-//                                    int likes = XposedHelpers.getIntField(media, "k");
+                                    Object userObject = getObjectField(media, "e");
+                                    String user = (String) getObjectField(userObject, "a");
+                                    String video = (String) getObjectField(media, "ac");
+                                    String image = (String) callMethod(media, "a", context);
+                                    String id = (String) callMethod(media, "e");
+                                    int type = getIntField(getObjectField(media, "f"), "f");
                                     if (type == 1) {
                                         FileUtils.download(image, new File(FileUtils.INSTAPREFS_DIR, user + "/" + id + ".jpg"), context);
                                     } else if (type == 2) {
                                         FileUtils.download(video, new File(FileUtils.INSTAPREFS_DIR, user + "/" + id + ".mp4"), context);
                                     } else {
-                                        debug("Unsupported media type " + XposedHelpers.getObjectField(media, "f").toString());
+                                        debug("Unsupported media type " + getObjectField(media, "f").toString());
                                     }
                                 } else if (clicked.equalsIgnoreCase("Zoom")) {
-                                    String image = (String) XposedHelpers.callMethod(media, "a", context);
+                                    String image = (String) callMethod(media, "a", context);
                                     Intent intent = new Intent();
                                     intent.setComponent(ComponentName.unflattenFromString("com.stirante.instaprefs/.ZoomActivity"));
                                     intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -111,19 +113,19 @@ public class InstaprefsModule implements IXposedHookLoadPackage, IXposedHookZygo
                         }
                     });
                     //add download and zoom to direct
-                    XposedHelpers.findAndHookMethod("com.instagram.android.directsharev2.b.dn", packageParam.classLoader, "b", XposedHelpers.findClass("com.instagram.direct.model.l", packageParam.classLoader), new XC_MethodReplacement() {
+                    findAndHookMethod("com.instagram.android.directsharev2.b.dn", packageParam.classLoader, "b", findClass("com.instagram.direct.model.l", packageParam.classLoader), new XC_MethodReplacement() {
                         @Override
                         protected Object replaceHookedMethod(MethodHookParam param) throws Throwable {
                             Object directMessage_l = param.args[0];
                             ArrayList<CharSequence> arrayList = new ArrayList<>();
-                            if ((boolean) XposedHelpers.callMethod(directMessage_l, "t")) {
+                            if ((boolean) callMethod(directMessage_l, "t")) {
                                 arrayList.add(context.getResources().getString(context.getResources().getIdentifier("direct_unsend_message", "string", context.getPackageName())));
                             }
-                            if ((boolean) XposedHelpers.callMethod(directMessage_l, "u")) {
+                            if ((boolean) callMethod(directMessage_l, "u")) {
                                 arrayList.add(context.getResources().getString(context.getResources().getIdentifier("direct_report_message", "string", context.getPackageName())));
                             }
-                            CharSequence a = (CharSequence) XposedHelpers.callStaticMethod(XposedHelpers.findClass("com.instagram.direct.model.o", packageParam.classLoader), "a", new Class[]{XposedHelpers.findClass("com.instagram.direct.model.l", packageParam.classLoader), XposedHelpers.findClass("android.content.res.Resources", packageParam.classLoader)}, directMessage_l, XposedHelpers.callMethod(param.thisObject, "getResources"));
-                            String type = (String) XposedHelpers.callMethod(XposedHelpers.callMethod(directMessage_l, "b"), "name");
+                            CharSequence a = (CharSequence) callStaticMethod(findClass("com.instagram.direct.model.o", packageParam.classLoader), "a", new Class[]{findClass("com.instagram.direct.model.l", packageParam.classLoader), findClass("android.content.res.Resources", packageParam.classLoader)}, directMessage_l, callMethod(param.thisObject, "getResources"));
+                            String type = (String) callMethod(callMethod(directMessage_l, "b"), "name");
                             if (!(type.equalsIgnoreCase("MEDIA") || type.equalsIgnoreCase("MEDIA_SHARE") || TextUtils.isEmpty(a))) {
                                 arrayList.add(context.getResources().getString(context.getResources().getIdentifier("direct_copy_message_text", "string", context.getPackageName())));
                             }
@@ -133,42 +135,42 @@ public class InstaprefsModule implements IXposedHookLoadPackage, IXposedHookZygo
                             }
                             boolean z = !arrayList.isEmpty();
                             if (z) {
-                                Object onClick = XposedHelpers.newInstance(XposedHelpers.findClass("com.instagram.android.directsharev2.b.cw", packageParam.classLoader), new Class[]{XposedHelpers.findClass("com.instagram.android.directsharev2.b.dn", packageParam.classLoader), ArrayList.class, XposedHelpers.findClass("com.instagram.direct.model.l", packageParam.classLoader), String.class}, param.thisObject, arrayList, directMessage_l, a);
-                                Object builder = XposedHelpers.newInstance(XposedHelpers.findClass("com.instagram.ui.dialog.f", packageParam.classLoader), new Class[]{Context.class}, XposedHelpers.callMethod(param.thisObject, "getContext"));
-                                XposedHelpers.callMethod(builder, "a", arrayList.toArray(new CharSequence[arrayList.size()]), onClick);
-                                XposedHelpers.callMethod(builder, "a", true);
-                                XposedHelpers.callMethod(builder, "b", true);
-                                Dialog dialog = (Dialog) XposedHelpers.callMethod(builder, "c");
+                                Object onClick = newInstance(findClass("com.instagram.android.directsharev2.b.cw", packageParam.classLoader), new Class[]{findClass("com.instagram.android.directsharev2.b.dn", packageParam.classLoader), ArrayList.class, findClass("com.instagram.direct.model.l", packageParam.classLoader), String.class}, param.thisObject, arrayList, directMessage_l, a);
+                                Object builder = newInstance(findClass("com.instagram.ui.dialog.e", packageParam.classLoader), new Class[]{Context.class}, callMethod(param.thisObject, "getContext"));
+                                callMethod(builder, "a", arrayList.toArray(new CharSequence[arrayList.size()]), onClick);
+                                callMethod(builder, "a", true);
+                                callMethod(builder, "b", true);
+                                Dialog dialog = (Dialog) callMethod(builder, "c");
                                 dialog.show();
                             }
-                            XposedHelpers.callMethod(param.thisObject, "m");
+                            callMethod(param.thisObject, "m");
                             return z;
                         }
                     });
                     //handle download and zoom in direct
-                    XposedHelpers.findAndHookMethod("com.instagram.android.directsharev2.b.cw", packageParam.classLoader, "onClick", XposedHelpers.findClass("android.content.DialogInterface", packageParam.classLoader), int.class, new XC_MethodHook() {
+                    findAndHookMethod("com.instagram.android.directsharev2.b.cw", packageParam.classLoader, "onClick", findClass("android.content.DialogInterface", packageParam.classLoader), int.class, new XC_MethodHook() {
                         @Override
                         protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                            String clicked = (String) ((ArrayList) XposedHelpers.getObjectField(param.thisObject, "a")).get((Integer) param.args[1]);
+                            String clicked = (String) ((ArrayList) getObjectField(param.thisObject, "a")).get((Integer) param.args[1]);
                             if (clicked.equalsIgnoreCase("Download")) {
-                                Object media = XposedHelpers.getObjectField(XposedHelpers.getObjectField(param.thisObject, "b"), "B");
-                                Object userObject = XposedHelpers.getObjectField(XposedHelpers.getObjectField(param.thisObject, "b"), "d");
-                                String user = (String) XposedHelpers.getObjectField(userObject, "a");
-                                String video = (String) XposedHelpers.getObjectField(media, "ac");
-                                String image = (String) XposedHelpers.callMethod(media, "a", context);
-                                String id = XposedHelpers.callMethod(XposedHelpers.getObjectField(param.thisObject, "b"), "d").toString();
-                                int type = XposedHelpers.getIntField(XposedHelpers.getObjectField(media, "f"), "e");
+                                Object media = getObjectField(getObjectField(param.thisObject, "b"), "B");
+                                Object userObject = getObjectField(getObjectField(param.thisObject, "b"), "d");
+                                String user = (String) getObjectField(userObject, "a");
+                                String video = (String) getObjectField(media, "ac");
+                                String image = (String) callMethod(media, "a", context);
+                                String id = callMethod(getObjectField(param.thisObject, "b"), "i").toString();
+                                int type = getIntField(getObjectField(media, "f"), "f");
                                 if (type == 1) {
                                     FileUtils.download(image, new File(FileUtils.INSTAPREFS_DIR, user + "/" + id + ".jpg"), context);
                                 } else if (type == 2) {
                                     FileUtils.download(video, new File(FileUtils.INSTAPREFS_DIR, user + "/" + id + ".mp4"), context);
                                 } else {
-                                    debug("Unsupported media type " + XposedHelpers.getObjectField(media, "f").toString());
+                                    debug("Unsupported media type " + getObjectField(media, "f").toString());
                                 }
                             } else if (clicked.equalsIgnoreCase("Zoom")) {
-                                Object media = XposedHelpers.getObjectField(XposedHelpers.getObjectField(param.thisObject, "b"), "B");
-                                String image = (String) XposedHelpers.callMethod(media, "a", context);
-                                int type = XposedHelpers.getIntField(XposedHelpers.getObjectField(media, "f"), "e");
+                                Object media = getObjectField(getObjectField(param.thisObject, "b"), "B");
+                                String image = (String) callMethod(media, "a", context);
+                                int type = getIntField(getObjectField(media, "f"), "f");
                                 if (type == 1) {
                                     Intent intent = new Intent();
                                     intent.setComponent(ComponentName.unflattenFromString("com.stirante.instaprefs/.ZoomActivity"));
@@ -178,18 +180,18 @@ public class InstaprefsModule implements IXposedHookLoadPackage, IXposedHookZygo
                                 } else if (type == 2) {
                                     Toast.makeText(context, "Can't zoom video!", Toast.LENGTH_SHORT).show();
                                 } else {
-                                    debug("Unsupported media type " + XposedHelpers.getObjectField(media, "f").toString());
+                                    debug("Unsupported media type " + getObjectField(media, "f").toString());
                                 }
                             }
                         }
                     });
                     //hide ads
                     if (prefs.getBoolean("disable_ads", false)) {
-                        XposedHelpers.findAndHookMethod("com.instagram.feed.a.z", packageParam.classLoader, "a", XposedHelpers.findClass("com.instagram.feed.a.x", packageParam.classLoader), new XC_MethodHook() {
+                        findAndHookMethod("com.instagram.feed.a.z", packageParam.classLoader, "a", findClass("com.instagram.feed.a.x", packageParam.classLoader), new XC_MethodHook() {
                             @Override
                             protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                                 Object media = param.args[0];
-                                if (XposedHelpers.getObjectField(media, "Q") != null) {
+                                if (getObjectField(media, "z") != null) {
                                     param.setResult(null);
                                 }
                             }
@@ -197,10 +199,10 @@ public class InstaprefsModule implements IXposedHookLoadPackage, IXposedHookZygo
                     }
                     //hide recommendation
                     if (prefs.getBoolean("disable_suggested_follow", false)) {
-                        XposedHelpers.findAndHookMethod("com.instagram.g.o", packageParam.classLoader, "a", XposedHelpers.findClass("com.instagram.common.analytics.f", packageParam.classLoader), View.class, XposedHelpers.findClass("com.instagram.g.a.g", packageParam.classLoader), XposedHelpers.findClass("com.instagram.g.p", packageParam.classLoader), new XC_MethodHook() {
+                        findAndHookMethod("com.instagram.g.o", packageParam.classLoader, "a", findClass("com.instagram.common.analytics.f", packageParam.classLoader), View.class, findClass("com.instagram.g.a.g", packageParam.classLoader), findClass("com.instagram.g.p", packageParam.classLoader), new XC_MethodHook() {
                             @Override
                             protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                                XposedHelpers.callMethod(param.args[3], "c", param.args[2]);
+                                callMethod(param.args[3], "d", param.args[2]);
                                 debug("Hid the recommendation");
                             }
                         });
@@ -208,6 +210,19 @@ public class InstaprefsModule implements IXposedHookLoadPackage, IXposedHookZygo
                 }
             });
         }
+    }
+
+    private void traceObject(Object obj) {
+        Field[] fields = obj.getClass().getDeclaredFields();
+        for (Field f : fields) {
+            try {
+                f.setAccessible(true);
+                debug(f.getName() + ": " + f.get(obj));
+            } catch (IllegalAccessException e) {
+                e.printStackTrace();
+            }
+        }
+        debug("-------------");
     }
 
     private void debug(String string) {
