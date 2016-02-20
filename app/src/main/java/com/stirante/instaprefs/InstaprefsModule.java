@@ -6,8 +6,9 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.res.Resources;
+import android.text.SpannableStringBuilder;
 import android.text.TextUtils;
-import android.view.View;
 import android.widget.Toast;
 
 import com.stirante.instaprefs.utils.FileUtils;
@@ -16,6 +17,7 @@ import java.io.File;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.IXposedHookZygoteInit;
@@ -35,6 +37,7 @@ public class InstaprefsModule implements IXposedHookLoadPackage, IXposedHookZygo
 
     private XSharedPreferences prefs;
     private boolean debug;
+    private String[] ignored_tags;
 
 
     @Override
@@ -46,11 +49,15 @@ public class InstaprefsModule implements IXposedHookLoadPackage, IXposedHookZygo
     @Override
     public void handleLoadPackage(final XC_LoadPackage.LoadPackageParam packageParam) throws Throwable {
         if (packageParam.packageName.equalsIgnoreCase("com.instagram.android")) {
-            prefs.reload();
-            debug = prefs.getBoolean("enable_spam", false);
             findAndHookMethod(Application.class, "attach", Context.class, new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                    prefs.makeWorldReadable();
+                    prefs.reload();
+                    debug = prefs.getBoolean("enable_spam", false);
+                    debug("Hooked into Intagram");
+                    ignored_tags = prefs.getString("ignored_tags", "").split(";");
+                    if (ignored_tags.length == 1 && ignored_tags[0].isEmpty()) ignored_tags = new String[]{};
                     final Context context = (Context) param.args[0];
                     //disable double tap to like
                     if (prefs.getBoolean("disable_double_tap_like", false)) {
@@ -185,25 +192,64 @@ public class InstaprefsModule implements IXposedHookLoadPackage, IXposedHookZygo
                             }
                         }
                     });
-                    //hide ads
-                    if (prefs.getBoolean("disable_ads", false)) {
+                    //hiding some things
+                    final boolean disable_ads = prefs.getBoolean("disable_ads", false);
+                    final boolean disable_tags = prefs.getBoolean("disable_tags", false);
+                    if (disable_ads || disable_tags) {
                         findAndHookMethod("com.instagram.feed.a.z", packageParam.classLoader, "a", findClass("com.instagram.feed.a.x", packageParam.classLoader), new XC_MethodHook() {
                             @Override
                             protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                                 Object media = param.args[0];
-                                if (getObjectField(media, "z") != null) {
-                                    param.setResult(null);
+                                //hiding ads
+                                if (disable_ads) {
+                                    if (getObjectField(media, "z") != null) {
+                                        param.setResult(null);
+                                        return;
+                                    }
+                                }
+                                //hiding posts with specified hashtags
+                                if (disable_tags) {
+                                    List o = (List) XposedHelpers.callMethod(XposedHelpers.callMethod(media, "J"), "c");
+                                    if (o != null && o.size() > 0) {
+                                        Object comment = o.get(0);
+                                        if (((Enum) XposedHelpers.callMethod(comment, "i")).name().equalsIgnoreCase("Caption")) {
+                                            String text = (String) XposedHelpers.callMethod(comment, "f");
+                                            for (String tag : ignored_tags) {
+                                                if (text.toLowerCase().contains("#" + tag)) {
+                                                    param.setResult(null);
+                                                    return;
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         });
                     }
                     //hide recommendation
                     if (prefs.getBoolean("disable_suggested_follow", false)) {
-                        findAndHookMethod("com.instagram.g.o", packageParam.classLoader, "a", findClass("com.instagram.common.analytics.f", packageParam.classLoader), View.class, findClass("com.instagram.g.a.g", packageParam.classLoader), findClass("com.instagram.g.p", packageParam.classLoader), new XC_MethodHook() {
+                        XposedHelpers.findAndHookMethod("com.instagram.g.q", packageParam.classLoader, "a", XposedHelpers.findClass("com.instagram.g.a.g", packageParam.classLoader), new XC_MethodHook() {
                             @Override
-                            protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                                callMethod(param.args[3], "d", param.args[2]);
-                                debug("Hid the recommendation");
+                            protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                                XposedBridge.log("Hid the recommendation v3");
+                                param.setResult(null);
+                            }
+                        });
+                        XposedHelpers.findAndHookMethod("com.instagram.g.q", packageParam.classLoader, "getCount", new XC_MethodHook() {
+                            @Override
+                            protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                                XposedBridge.log("Hid the recommendation v2");
+                                param.setResult(0);
+                            }
+                        });
+                    }
+                    if (prefs.getBoolean("disable_comments", false)) {
+                        XposedHelpers.findAndHookMethod("com.instagram.feed.ui.text.af", packageParam.classLoader, "a", Resources.class, SpannableStringBuilder.class, boolean.class, XposedHelpers.findClass("com.instagram.feed.a.i", packageParam.classLoader), XposedHelpers.findClass("com.instagram.feed.ui.text.b", packageParam.classLoader), new XC_MethodHook() {
+                            @Override
+                            protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                                if (!((Enum) XposedHelpers.callMethod(param.args[3], "i")).name().equalsIgnoreCase("Caption")) {// || !((boolean) param.args[2])
+                                    param.setResult(((SpannableStringBuilder) param.args[1]).length());
+                                }
                             }
                         });
                     }
@@ -212,12 +258,12 @@ public class InstaprefsModule implements IXposedHookLoadPackage, IXposedHookZygo
         }
     }
 
-    private void traceObject(Object obj) {
+    private void traceObject(Object obj, String name) {
         Field[] fields = obj.getClass().getDeclaredFields();
         for (Field f : fields) {
             try {
                 f.setAccessible(true);
-                debug(f.getName() + ": " + f.get(obj));
+                debug(name + "." + f.getName() + " = " + f.get(obj));
             } catch (IllegalAccessException e) {
                 e.printStackTrace();
             }

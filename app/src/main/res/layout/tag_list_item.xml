@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical" android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textAppearance="?android:attr/textAppearanceLarge"
+        android:text="@string/hashtag"
+        android:id="@+id/hashtag"
+        android:layout_alignBottom="@+id/remove_button"
+        android:layout_alignParentTop="true"
+        android:gravity="center" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/tag_name"
+        android:layout_alignParentTop="true"
+        android:layout_alignBottom="@+id/hashtag"
+        android:layout_toLeftOf="@+id/remove_button"
+        android:layout_toRightOf="@+id/hashtag"
+        android:layout_toEndOf="@+id/hashtag"
+        android:gravity="center_vertical"
+        android:padding="5dp" />
+
+    <Button
+        style="?android:attr/buttonStyleSmall"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/remove"
+        android:id="@+id/remove_button"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentRight="true"
+        android:layout_alignParentEnd="true" />
+</RelativeLayout>
